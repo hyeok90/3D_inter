@@ -37,7 +37,7 @@ export async function GET(
     }
 
     // Return the content with the appropriate content type
-    return new NextResponse(fileContent.buffer, {
+    return new NextResponse(new Blob([fileContent]), {
       status: 200,
       headers: {
         "Content-Type": contentType,
