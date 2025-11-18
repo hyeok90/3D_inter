@@ -106,7 +106,7 @@ export default function HomePage() {
 
       if (!navigator.mediaDevices?.getUserMedia) {
         showToast("이 기기에서는 카메라 API를 사용할 수 없습니다. 동영상 파일을 업로드하여 진행할 수 있습니다.", "info");
-        setStage("review");
+        setStage("record");
         return false;
       }
 
@@ -146,7 +146,7 @@ export default function HomePage() {
         } else {
           showToast("카메라 접근 권한이 필요합니다. 동영상 파일을 업로드하여 진행할 수 있습니다.", "error");
         }
-        setStage("review");
+        setStage("record");
         return false;
       }
     },
