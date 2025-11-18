@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Environment, Html, OrbitControls } from "@react-three/drei";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { Mesh } from "three";

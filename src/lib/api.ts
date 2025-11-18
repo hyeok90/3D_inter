@@ -55,7 +55,7 @@ export async function fetchConvertedModel(uploadId: string): Promise<ConvertedMo
     // Return mock data if the backend URL is not set
     await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
     return {
-      url: `/output.obj`, // Point to the static file in the public directory
+      url: `/api/static/output.obj`, // Point to the new dynamic API route
       type: "obj",
       label: `Custom Mockup · output.obj`,
     };
