@@ -8,10 +8,11 @@ import { NextRequest } from "next/server";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { slug: string[] } }
+  { params }: { params: Promise<{ slug: string[] }> }
 ) {
   try {
-    const filename = params.slug.join("/");
+    const { slug } = await params;
+    const filename = slug.join("/");
     if (!filename) {
       return new NextResponse("File not specified.", { status: 400 });
     }
@@ -43,7 +44,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error(`Failed to read file from root: ${params.slug.join("/")}`, error);
+    console.error(`Failed to read file from root:`, error);
     return new NextResponse("File not found.", { status: 404 });
   }
 }
