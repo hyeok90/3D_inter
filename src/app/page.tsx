@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { fetchConvertedModel, uploadVideo } from "@/lib/api";
+import { uploadVideo, fetchConvertedModel } from "@/lib/api";
 import type { ModelType } from "@/components/ConvertedModelViewer";
 
 const ConvertedModelViewer = dynamic(
@@ -321,21 +321,30 @@ export default function HomePage() {
     }
     setProcessingResult(true);
     setRecordingStatus("processing");
-    setModelLoading(true);
+    
     try {
+      // Step 1: Upload the video and get an ID
       const { uploadId } = await uploadVideo(videoBlob);
+      
+      setStage("viewer");
+      setModelLoading(true);
+      showToast("업로드 완료! 모델 변환을 시작합니다. 시간이 다소 걸릴 수 있습니다.", "info");
+
+      // Step 2: Poll for the result
       const model = await fetchConvertedModel(uploadId);
+      
       setModelUrl(model.url);
       setModelType(model.type);
       setModelLabel(model.label);
-      setStage("viewer");
+
     } catch (error) {
       console.error("processing error", error);
-      showToast("모델을 가져오는데 실패했습니다.", "error");
-      await openCamera();
+      showToast(error instanceof Error ? error.message : "모델을 가져오는데 실패했습니다.", "error");
+      await openCamera(); // Go back to recording on failure
     } finally {
       setProcessingResult(false);
       setRecordingStatus("idle");
+      // setModelLoading(false) is handled by the ConvertedModelViewer's onLoaded callback
     }
   }, [videoBlob, showToast, openCamera]);
 

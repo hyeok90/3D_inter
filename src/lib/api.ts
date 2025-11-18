@@ -8,42 +8,78 @@ export type ConvertedModel = {
   label: string;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+export type ConversionStatus = {
+  status: "processing" | "completed";
+  model_info: ConvertedModel | null;
+};
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 /**
- * Placeholder upload implementation. Replace with a POST to FastAPI `/api/upload` when backend is ready.
+ * Uploads the video to the backend server and returns an upload ID.
  */
 export async function uploadVideo(blob: Blob): Promise<UploadResponse> {
   if (!blob || blob.size === 0) {
-    throw new Error("녹화된 영상이 없습니다.");
+    throw new Error("The video to convert is missing.");
   }
 
-  if (API_BASE_URL) {
-    console.info("uploadVideo: Replace this stub with POST", `${API_BASE_URL}/api/upload`);
+  if (!API_BASE_URL) {
+    console.warn(
+      "NEXT_PUBLIC_API_BASE_URL is not set. Using mock data. See instructions for running a local backend.",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return { uploadId: "mock-id-for-ui-testing" };
   }
 
-  // Simulate network latency so UI states can be tested now.
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  const formData = new FormData();
+  formData.append("file", blob, "video.webm");
 
-  return {
-    uploadId: "mock-upload-id",
-  };
+  const response = await fetch(`${API_BASE_URL}/api/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to upload video: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
 }
 
 /**
- * Placeholder fetch implementation. Replace with GET to FastAPI `/api/result/:id` when backend is ready.
+ * Polls the backend server for the result of the conversion.
  */
 export async function fetchConvertedModel(uploadId: string): Promise<ConvertedModel> {
-  if (API_BASE_URL) {
-    console.info("fetchConvertedModel: Replace this stub with GET", `${API_BASE_URL}/api/result/:id`);
+  if (!API_BASE_URL) {
+    // Return mock data if the backend URL is not set
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
+    return {
+      url: `/api/mock-model`, // Point to the new API route
+      type: "obj",
+      label: `Custom Mockup · output.obj`,
+    };
   }
 
-  // Simulate conversion time.
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  // Poll the result endpoint until the status is 'completed'
+  while (true) {
+    const response = await fetch(`${API_BASE_URL}/api/result/${uploadId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch conversion status: ${response.status}`);
+    }
 
-  return {
-    url: `/models/demo-mesh.obj?mock=${uploadId}`,
-    type: "obj",
-    label: `Demo star mesh · Backend not connected yet (#${uploadId})`,
-  };
+    const result: ConversionStatus = await response.json();
+
+    if (result.status === "completed" && result.model_info) {
+      // The backend returns a relative URL, so we prepend the base URL
+      // to make it absolute for the 3D viewer component.
+      return {
+        ...result.model_info,
+        url: `${API_BASE_URL}${result.model_info.url}`,
+      };
+    }
+
+    // Wait for 2 seconds before polling again
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
