@@ -105,8 +105,8 @@ export default function HomePage() {
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        showToast("이 기기에서는 카메라 API를 사용할 수 없습니다.", "error");
-        setStage("locked");
+        showToast("이 기기에서는 카메라 API를 사용할 수 없습니다. 동영상 파일을 업로드하여 진행할 수 있습니다.", "info");
+        setStage("review");
         return false;
       }
 
@@ -140,13 +140,13 @@ export default function HomePage() {
         console.error("camera permission error", error);
         const errorName = (error as DOMException | Error)?.name ?? "Error";
         if (errorName === "NotAllowedError") {
-          showToast("카메라 권한을 허용해주세요. 브라우저 설정에서 변경 가능합니다.", "error");
+          showToast("카메라 권한을 허용해주세요. 브라우저 설정에서 변경 가능합니다. 또는 동영상 파일을 업로드하여 진행할 수 있습니다.", "error");
         } else if (errorName === "NotFoundError") {
-          showToast("사용 가능한 카메라를 찾을 수 없습니다.", "error");
+          showToast("사용 가능한 카메라를 찾을 수 없습니다. 동영상 파일을 업로드하여 진행할 수 있습니다.", "error");
         } else {
-          showToast("카메라 접근 권한이 필요합니다.", "error");
+          showToast("카메라 접근 권한이 필요합니다. 동영상 파일을 업로드하여 진행할 수 있습니다.", "error");
         }
-        setStage("locked");
+        setStage("review");
         return false;
       }
     },
