@@ -30,24 +30,16 @@ function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
   });
 
   useEffect(() => {
-    // Apply vertex colors to the mesh if they exist
+    // The OBJ model is expected to have vertex colors.
+    // We'll traverse the model and apply a material that explicitly uses them,
+    // ignoring the generic gray material from the MTL file.
     object.traverse((child) => {
       if (child instanceof Mesh) {
-        // Check if the geometry has vertex colors
-        const geometry = child.geometry;
-        if (geometry.attributes.color) {
-          // Enable vertex colors in the material
-          if (child.material) {
-            const material = Array.isArray(child.material) 
-              ? child.material[0] 
-              : child.material;
-            
-            if (material instanceof MeshStandardMaterial) {
-              material.vertexColors = true;
-              material.needsUpdate = true;
-            }
-          }
-        }
+        child.material = new MeshStandardMaterial({
+          vertexColors: true,
+          metalness: 0.1,
+          roughness: 0.6,
+        });
       }
     });
     
