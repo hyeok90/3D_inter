@@ -25,26 +25,19 @@ export async function GET(
         return new NextResponse("Forbidden.", { status: 403 });
     }
 
-    // Read the file content
-    const fileContent = await fs.readFile(requestedPath);
-
-    // This is a workaround for a Vercel build environment issue where the Buffer from fs.readFile
-    // is not directly compatible with NextResponse or Blob constructors.
-    // By explicitly creating a new ArrayBuffer and copying the data, we ensure type compatibility.
-    const arrayBuffer = new ArrayBuffer(fileContent.length);
-    const view = new Uint8Array(arrayBuffer);
-    view.set(fileContent);
+    // Read the file content as a string, which is what the client-side loaders expect.
+    const fileContent = await fs.readFile(requestedPath, "utf-8");
 
     // Determine content type based on file extension
     let contentType = "application/octet-stream";
     if (filename.endsWith(".obj")) {
-      contentType = "text/plain"; // Or model/obj
+      contentType = "text/plain; charset=utf-8";
     } else if (filename.endsWith(".mtl")) {
-      contentType = "text/plain"; // Or model/mtl
+      contentType = "text/plain; charset=utf-8";
     }
 
     // Return the content with the appropriate content type
-    return new NextResponse(arrayBuffer, {
+    return new NextResponse(fileContent, {
       status: 200,
       headers: {
         "Content-Type": contentType,
