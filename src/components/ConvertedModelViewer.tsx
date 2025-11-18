@@ -6,7 +6,7 @@ import { Environment, Html, OrbitControls } from "@react-three/drei";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { Mesh } from "three";
+import { Mesh, MeshStandardMaterial } from "three";
 
 export type ModelType = "obj" | "stl";
 
@@ -30,6 +30,27 @@ function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
   });
 
   useEffect(() => {
+    // Apply vertex colors to the mesh if they exist
+    object.traverse((child) => {
+      if (child instanceof Mesh) {
+        // Check if the geometry has vertex colors
+        const geometry = child.geometry;
+        if (geometry.attributes.color) {
+          // Enable vertex colors in the material
+          if (child.material) {
+            const material = Array.isArray(child.material) 
+              ? child.material[0] 
+              : child.material;
+            
+            if (material instanceof MeshStandardMaterial) {
+              material.vertexColors = true;
+              material.needsUpdate = true;
+            }
+          }
+        }
+      }
+    });
+    
     // Fire the onLoaded callback once the object is loaded.
     onLoaded?.();
   }, [object, onLoaded]);
