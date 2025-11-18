@@ -30,16 +30,18 @@ function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
   });
 
   useEffect(() => {
-    // The OBJ model is expected to have vertex colors.
-    // We'll traverse the model and apply a material that explicitly uses them,
-    // ignoring the generic gray material from the MTL file.
     object.traverse((child) => {
       if (child instanceof Mesh) {
-        child.material = new MeshStandardMaterial({
-          vertexColors: true,
-          metalness: 0.1,
-          roughness: 0.6,
-        });
+        // Apply DoubleSide rendering to all materials to fix invisible faces
+        if (Array.isArray(child.material)) {
+          child.material.forEach((material) => {
+            material.side = 2; // THREE.DoubleSide
+          });
+        } else {
+          child.material.side = 2; // THREE.DoubleSide
+        }
+        // Ensure all meshes can cast shadows
+        child.castShadow = true;
       }
     });
     
@@ -93,15 +95,32 @@ export function ConvertedModelViewer({
 }: ConvertedModelViewerProps) {
   return (
     <div className="relative h-full w-full">
-      <Canvas camera={{ position: [1.6, 1.2, 1.6], fov: 50 }} dpr={[1, 2]}>
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[2, 3, 4]} intensity={0.9} />
+      <Canvas shadows camera={{ position: [0, 2, 5], fov: 50 }} dpr={[1, 2]}>
+        <hemisphereLight intensity={0.2} groundColor="black" />
+        <ambientLight intensity={0.4} />
+        <directionalLight
+          position={[5, 5, 5]}
+          intensity={1.5}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-bias={-0.0001}
+        />
+        <directionalLight position={[-5, 3, 2]} intensity={0.7} />
+
         <Suspense fallback={<CanvasFallback />}>
           <group scale={1.4}>
             <ModelHost modelType={modelType} modelUrl={modelUrl} onLoaded={onLoaded} />
           </group>
           <Environment preset="city" />
         </Suspense>
+
+        {/* Add a ground plane to receive shadows */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]} receiveShadow>
+          <planeGeometry args={[100, 100]} />
+          <shadowMaterial opacity={0.3} />
+        </mesh>
+        
         <OrbitControls enablePan enableZoom enableRotate />
       </Canvas>
     </div>
