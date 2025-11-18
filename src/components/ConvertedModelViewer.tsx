@@ -32,14 +32,13 @@ function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
   useEffect(() => {
     object.traverse((child) => {
       if (child instanceof Mesh) {
-        // Apply DoubleSide rendering to all materials to fix invisible faces
-        if (Array.isArray(child.material)) {
-          child.material.forEach((material) => {
-            material.side = 2; // THREE.DoubleSide
-          });
-        } else {
-          child.material.side = 2; // THREE.DoubleSide
-        }
+        // Create a new material that uses vertex colors AND is double-sided
+        child.material = new MeshStandardMaterial({
+          vertexColors: true,
+          side: 2, // THREE.DoubleSide
+          metalness: 0.1,
+          roughness: 0.6,
+        });
         // Ensure all meshes can cast shadows
         child.castShadow = true;
       }
