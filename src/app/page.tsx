@@ -248,6 +248,13 @@ export default function HomePage() {
 
 
 
+  useEffect(() => {
+    console.log(
+      "DIAGNOSTIC_LOG: NEXT_PUBLIC_API_BASE_URL is:",
+      process.env.NEXT_PUBLIC_API_BASE_URL
+    );
+  }, []);
+
   const handlePasswordSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
