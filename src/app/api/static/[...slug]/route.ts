@@ -28,6 +28,13 @@ export async function GET(
     // Read the file content
     const fileContent = await fs.readFile(requestedPath);
 
+    // This is a workaround for a Vercel build environment issue where the Buffer from fs.readFile
+    // is not directly compatible with NextResponse or Blob constructors.
+    // By explicitly creating a new ArrayBuffer and copying the data, we ensure type compatibility.
+    const arrayBuffer = new ArrayBuffer(fileContent.length);
+    const view = new Uint8Array(arrayBuffer);
+    view.set(fileContent);
+
     // Determine content type based on file extension
     let contentType = "application/octet-stream";
     if (filename.endsWith(".obj")) {
@@ -37,7 +44,7 @@ export async function GET(
     }
 
     // Return the content with the appropriate content type
-    return new NextResponse(new Blob([fileContent]), {
+    return new NextResponse(arrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
