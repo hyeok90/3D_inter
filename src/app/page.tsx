@@ -15,7 +15,7 @@ type Stage = "locked" | "record" | "review" | "viewer";
 type RecordingStatus = "idle" | "recording" | "processing";
 type ToastTone = "info" | "error";
 
-const ACCESS_PASSWORD = "ljtk";
+
 const MAX_DURATION_MS = 60_000;
 
 function formatTime(ms: number) {
@@ -26,8 +26,8 @@ function formatTime(ms: number) {
 }
 
 export default function HomePage() {
-  const [stage, setStage] = useState<Stage>("locked");
-  const [passwordError, setPasswordError] = useState("");
+  const [stage, setStage] = useState<Stage>("record");
+
 
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -244,26 +244,7 @@ export default function HomePage() {
     return undefined;
   }, [isFullscreen]);
 
-  const handlePasswordSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const value = passwordInputRef.current?.value?.trim() ?? "";
-      if (value === ACCESS_PASSWORD) {
-        setPasswordError("");
-        passwordInputRef.current?.blur();
-        await openCamera();
-        return;
-      }
-      setPasswordError("비밀번호가 올바르지 않습니다.");
-    },
-    [openCamera],
-  );
 
-  const handlePasswordChange = useCallback(() => {
-    if (passwordError) {
-      setPasswordError("");
-    }
-  }, [passwordError]);
 
   const handleStopRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state === "recording") {
@@ -341,45 +322,7 @@ export default function HomePage() {
     void openCamera();
   }, [openCamera]);
 
-  const renderPasswordGate = () => (
-    <form
-      onSubmit={handlePasswordSubmit}
-      className="flex flex-1 flex-col justify-center gap-6 md:mx-auto md:max-w-sm"
-      autoComplete="off"
-      suppressHydrationWarning
-    >
-      <header className="space-y-2 text-center">
-        <p className="text-sm uppercase tracking-[0.4em] text-slate-400">Welcome</p>
-        <h1 className="text-3xl font-semibold text-white">Jinhyuk MVP</h1>
-        <p className="text-sm text-slate-400">
-          비밀번호를 입력하면 촬영 화면으로 이동합니다.
-        </p>
-      </header>
-      <label className="flex flex-col gap-2">
-        <span className="text-sm text-slate-300">비밀번호</span>
-        <input
-          ref={passwordInputRef}
-          type="password"
-          className="rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none"
-          placeholder="비밀번호 입력"
-          onChange={handlePasswordChange}
-          autoFocus
-          autoComplete="off"
-        />
-        {passwordError ? (
-          <span className="text-sm text-rose-400">{passwordError}</span>
-        ) : (
-          <span className="text-xs text-slate-500">힌트: ljtk (소문자)</span>
-        )}
-      </label>
-      <button
-        type="submit"
-        className="rounded-xl bg-sky-500 py-3 text-base font-semibold text-white shadow-lg shadow-sky-500/30 transition active:scale-[0.99]"
-      >
-        입장하기
-      </button>
-    </form>
-  );
+
 
   const renderRecording = () => (
     <section className="flex flex-1 flex-col gap-6 md:flex-row md:items-start md:gap-10">
@@ -624,12 +567,11 @@ export default function HomePage() {
       )}
       <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col gap-8 px-5 pb-10 md:px-10 lg:px-12">
         <div className="pt-6 text-center text-xs uppercase tracking-[0.3em] text-slate-500 md:flex md:items-center md:justify-between md:text-left">
-          <span>Password → 촬영 → 확인 → Mock 3D</span>
+          <span>3D Reconstruction</span>
           <span className="mt-2 block text-[10px] text-slate-600 md:mt-0 md:text-xs">
             모바일 최적화 · 테이블·데스크톱 레이아웃 자동 적용
           </span>
         </div>
-        {stage === "locked" && renderPasswordGate()}
         {stage === "record" && renderRecording()}
         {stage === "review" && renderReview()}
         {stage === "viewer" && renderViewer()}
