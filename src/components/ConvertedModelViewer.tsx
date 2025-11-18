@@ -3,9 +3,9 @@
 import { Suspense, useEffect } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Environment, Html, OrbitControls } from "@react-three/drei";
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { Mesh, MeshStandardMaterial } from "three";
+import { Mesh } from "three";
 
 export type ModelType = "obj" | "stl";
 
@@ -16,18 +16,20 @@ type ConvertedModelViewerProps = {
 };
 
 function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
-  const object = useLoader(OBJLoader, url);
+  // From the obj url, derive the mtl url.
+  const mtlUrl = url.replace(/\.obj$/, ".mtl");
+  
+  // Load the materials first
+  const materials = useLoader(MTLLoader, mtlUrl);
+  
+  // Load the object, and apply the materials
+  const object = useLoader(OBJLoader, url, (loader) => {
+    materials.preload();
+    loader.setMaterials(materials);
+  });
 
   useEffect(() => {
-    object.traverse((child) => {
-      if (child instanceof Mesh && !(child.material instanceof MeshStandardMaterial)) {
-        child.material = new MeshStandardMaterial({
-          color: "#4dabff",
-          roughness: 0.35,
-          metalness: 0.15,
-        });
-      }
-    });
+    // Fire the onLoaded callback once the object is loaded.
     onLoaded?.();
   }, [object, onLoaded]);
 
