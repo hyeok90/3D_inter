@@ -53,7 +53,7 @@ export async function uploadVideo(blob: Blob): Promise<UploadResponse> {
 export async function fetchConvertedModel(uploadId: string): Promise<ConvertedModel> {
   if (!API_BASE_URL) {
     // Return mock data if the backend URL is not set
-    await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
+    await new Promise((resolve) => setTimeout(resolve, 10000)); // 10-second delay
     return {
       url: `/output.obj`, // Points to /public/output.obj
       type: "obj",
