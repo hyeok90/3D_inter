@@ -45,7 +45,7 @@ export default function HomePage() {
 
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [modelType, setModelType] = useState<ModelType>("obj");
-  const [modelLabel, setModelLabel] = useState("Demo model · Backend not connected yet");
+  const [modelLabel, setModelLabel] = useState("Demo model");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
 

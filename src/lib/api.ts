@@ -57,7 +57,7 @@ export async function fetchConvertedModel(uploadId: string): Promise<ConvertedMo
     return {
       url: `/output.obj`, // Points to /public/output.obj
       type: "obj",
-      label: `Custom Mockup · output.obj`,
+      label: `Custom Mockup`,
     };
   }
 
