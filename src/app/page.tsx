@@ -321,14 +321,19 @@ export default function HomePage() {
     setRecordingStatus("processing");
     
     try {
-      // Step 1: Upload the video and get an ID
-      const { uploadId } = await uploadVideo(videoBlob);
+      // Determine a filename for the upload.
+      const filename = videoBlob instanceof File 
+        ? videoBlob.name 
+        : `recorded-video-${Date.now()}.webm`;
+
+      // The new uploadVideo function handles the multi-step direct upload process.
+      const { uploadId } = await uploadVideo(videoBlob, filename);
       
       setStage("viewer");
       setModelLoading(true);
       showToast("업로드 완료! 모델 변환을 시작합니다. 시간이 다소 걸릴 수 있습니다.", "info");
 
-      // Step 2: Poll for the result
+      // Step 2: Poll for the result (this part remains the same).
       const model = await fetchConvertedModel(uploadId);
       
       setModelUrl(model.url);

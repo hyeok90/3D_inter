@@ -176,25 +176,37 @@ def predictions_to_obj(predictions: dict, obj_path: str, conf_thres: float = 50.
 
 
 # --- Background Task for Conversion and Webhook ---
-async def process_and_notify(upload_id: str, video_path: str, webhook_url: str):
+async def process_and_notify(upload_id: str, video_url: str, webhook_url: str):
     """
-    Runs the full conversion pipeline and sends the result back to the main app's webhook.
+    Downloads the video from a URL, runs the full conversion pipeline, 
+    and sends the result back to the main app's webhook.
     """
     temp_dir = Path(WORKER_RESULT_DIR) / upload_id
     images_dir = temp_dir / "images"
     os.makedirs(images_dir, exist_ok=True)
     
+    temp_video_path = str(temp_dir / f"{upload_id}_source_video.mp4")
     result_obj_filename = f"{upload_id}.obj"
     result_obj_path = str(temp_dir / result_obj_filename)
     
     try:
-        # 1. Extract frames from video
-        extract_frames_from_video(video_path, str(images_dir), fps=1.0)
+        # 1. Download the video from the provided URL
+        print(f"Downloading video from: {video_url}")
+        async with httpx.AsyncClient(timeout=None) as client:
+            with open(temp_video_path, "wb") as f:
+                async with client.stream("GET", video_url) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        f.write(chunk)
+        print(f"Video downloaded to: {temp_video_path}")
 
-        # 2. Run model inference
+        # 2. Extract frames from the downloaded video
+        extract_frames_from_video(temp_video_path, str(images_dir), fps=3.0)
+
+        # 3. Run model inference
         predictions = run_model_inference(str(images_dir), model)
         
-        # 3. Create OBJ file
+        # 4. Create OBJ file
         predictions_to_obj(predictions, result_obj_path, conf_thres=50.0, poisson_depth=8)
         
         # Clean up model-related resources
@@ -202,7 +214,7 @@ async def process_and_notify(upload_id: str, video_path: str, webhook_url: str):
         gc.collect()
         torch.cuda.empty_cache()
 
-        # 4. Send the result back to the main app's webhook
+        # 5. Send the result back to the main app's webhook
         print(f"Sending result for {upload_id} to webhook: {webhook_url}")
         async with httpx.AsyncClient(timeout=None) as client:
             with open(result_obj_path, "rb") as f:
@@ -214,12 +226,8 @@ async def process_and_notify(upload_id: str, video_path: str, webhook_url: str):
 
     except Exception as e:
         print(f"FATAL: Conversion pipeline failed for {upload_id}: {e}")
-        # Optionally, notify the main app of the failure via webhook
-        # For now, it will just time out on the frontend.
     finally:
-        # 5. Clean up all temporary files and directories for this job
-        if os.path.exists(video_path):
-            os.remove(video_path)
+        # 6. Clean up all temporary files and directories for this job
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         print(f"Cleaned up all temporary files for job {upload_id}")
@@ -231,23 +239,15 @@ async def convert_video(
     background_tasks: BackgroundTasks,
     uploadId: str = Form(...),
     webhookUrl: str = Form(...),
-    videoFile: UploadFile = File(...),
+    videoUrl: str = Form(...),
 ):
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded. Worker is not ready.")
-    
-    try:
-        # Save the uploaded file temporarily on the worker
-        video_path = os.path.join(WORKER_UPLOAD_DIR, f"{uploadId}_{videoFile.filename}")
-        with open(video_path, "wb") as buffer:
-            shutil.copyfileobj(videoFile.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file on worker: {e}")
 
     print(f"Worker received job: {uploadId}. Starting conversion in background.")
     
     # Add the long-running task to the background
-    background_tasks.add_task(process_and_notify, uploadId, video_path, webhookUrl)
+    background_tasks.add_task(process_and_notify, uploadId, videoUrl, webhookUrl)
     
     # Immediately return a response to the main app
     return {"message": "Conversion task accepted and is running in the background."}

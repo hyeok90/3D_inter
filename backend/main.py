@@ -1,24 +1,13 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Request, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
-import shutil
 import os
 import uuid
 import httpx
 import redis
 import json
+from vercel_blob import generate_signed_url, vercel_blob
 
 app = FastAPI()
-
-# This is now handled by vercel.json, but kept here for clarity
-# from fastapi.middleware.cors import CORSMiddleware
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 
 # --- Configuration ---
 WORKER_API_URL = os.getenv("WORKER_API_URL", "http://localhost:8001")
@@ -37,13 +26,17 @@ def get_redis_client():
 
 redis_client = get_redis_client()
 
-# In Vercel, we can only write to the /tmp directory
-UPLOAD_DIR = "/tmp/uploads"
-RESULT_DIR = "/tmp/results"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(RESULT_DIR, exist_ok=True)
-
 # --- Pydantic Models ---
+class UploadURLRequest(BaseModel):
+    filename: str
+
+class UploadURLResponse(BaseModel):
+    uploadUrl: str
+    downloadUrl: str
+
+class StartConversionRequest(BaseModel):
+    downloadUrl: str
+    
 class UploadResponse(BaseModel):
     uploadId: str
 
@@ -56,47 +49,49 @@ class ConversionStatus(BaseModel):
     model_info: ConvertedModel | None = None
 
 # --- Worker Communication ---
-async def call_worker_for_conversion(upload_id: str, video_path: str, base_url: str):
+async def call_worker_for_conversion(upload_id: str, video_url: str, base_url: str):
     webhook_url = f"{base_url.rstrip('/')}/api/webhook/conversion-complete"
     print(f"Calling worker at {WORKER_API_URL} for uploadId: {upload_id}")
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
-            with open(video_path, "rb") as f:
-                files = {"videoFile": (os.path.basename(video_path), f, "video/mp4")}
-                data = {"uploadId": upload_id, "webhookUrl": webhook_url}
-                response = await client.post(f"{WORKER_API_URL}/convert", data=data, files=files)
-                response.raise_for_status()
+            data = {"uploadId": upload_id, "webhookUrl": webhook_url, "videoUrl": video_url}
+            response = await client.post(f"{WORKER_API_URL}/convert", data=data)
+            response.raise_for_status()
     except httpx.RequestError as e:
         print(f"Error calling worker for {upload_id}: {e}")
         if redis_client:
             redis_client.hset(upload_id, "status", "failed")
 
 # --- API Endpoints ---
-@app.post("/api/upload", response_model=UploadResponse)
-async def upload_video(
+@app.post("/api/upload-url", response_model=UploadURLResponse)
+async def create_upload_url(request: UploadURLRequest):
+    """
+    Generates a pre-signed URL for the client to upload a file directly to Vercel Blob.
+    """
+    try:
+        blob = generate_signed_url(operation='put', pathname=request.filename)
+        return UploadURLResponse(uploadUrl=blob.upload_url, downloadUrl=blob.download_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {e}")
+
+@app.post("/api/start-conversion", response_model=UploadResponse)
+async def start_conversion(
+    request: StartConversionRequest,
     background_tasks: BackgroundTasks,
-    request: Request,
-    file: UploadFile = File(...)
+    http_request: Request,
 ):
+    """
+    Starts the conversion process after a file has been uploaded to Vercel Blob.
+    """
     if not redis_client:
         raise HTTPException(status_code=503, detail="Database connection not available.")
-    if not file.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="File must be a video.")
 
     upload_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{upload_id}_{file.filename}")
-
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
-
     redis_client.hset(upload_id, mapping={"status": "processing", "model_info": ""})
     
-    base_url = str(request.base_url)
-    background_tasks.add_task(call_worker_for_conversion, upload_id, file_path, base_url)
+    base_url = str(http_request.base_url)
+    background_tasks.add_task(call_worker_for_conversion, upload_id, request.downloadUrl, base_url)
 
     return UploadResponse(uploadId=upload_id)
 
@@ -112,24 +107,24 @@ async def conversion_complete_webhook(
     if not redis_client.exists(uploadId):
         raise HTTPException(status_code=404, detail="Upload ID not found for webhook.")
 
-    result_filename = f"{uploadId}.obj"
-    result_path = os.path.join(RESULT_DIR, result_filename)
+    # Upload the resulting .obj file from the worker to our own Vercel Blob storage
     try:
-        with open(result_path, "wb") as buffer:
-            shutil.copyfileobj(objFile.file, buffer)
+        result_pathname = f"results/{uploadId}.obj"
+        blob_result = vercel_blob.put(pathname=result_pathname, body=objFile.file.read())
+        
+        model_info = ConvertedModel(
+            url=blob_result.url, # Use the public URL from Vercel Blob
+            label=f"Model #{uploadId[:8]}"
+        )
+        
+        redis_client.hset(uploadId, mapping={
+            "status": "completed",
+            "model_info": json.dumps(model_info.dict())
+        })
     except Exception as e:
-        print(f"Failed to save result file for {uploadId}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save result file: {e}")
-
-    model_info = ConvertedModel(
-        url=f"/api/result-file/{result_filename}",
-        label=f"Model #{uploadId[:8]}"
-    )
-    
-    redis_client.hset(uploadId, mapping={
-        "status": "completed",
-        "model_info": json.dumps(model_info.dict())
-    })
+        print(f"Webhook error: Failed to upload result to blob or update Redis. Error: {e}")
+        redis_client.hset(uploadId, "status", "failed")
+        raise HTTPException(status_code=500, detail="Failed to process conversion result.")
 
     return JSONResponse(content={"message": "Webhook processed successfully."})
 
@@ -158,9 +153,8 @@ async def get_conversion_result(upload_id: str):
 
     raise HTTPException(status_code=500, detail="Unknown job status.")
 
-@app.get("/api/result-file/{filename}")
-async def get_result_file(filename: str):
-    file_path = os.path.join(RESULT_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, media_type='application/octet-stream', filename=filename)
-    raise HTTPException(status_code=404, detail="File not found.")
+# This endpoint is no longer needed as files are served from Vercel Blob directly
+# @app.get("/api/result-file/{filename}")
+# async def get_result_file(filename: str):
+#     ...
+

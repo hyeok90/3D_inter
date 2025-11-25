@@ -12,40 +12,58 @@ export type ConversionStatus = {
   model_info: ConvertedModel | null;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+// This logic automatically determines the API base URL for both production (Vercel) and local environments.
+let API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+if (process.env.VERCEL_URL) {
+  API_BASE_URL = `https://` + process.env.VERCEL_URL;
+}
+
 const POLLING_INTERVAL_MS = 2500;
 const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 2.5 seconds = 2.5 minutes timeout
 
 /**
- * Uploads the video to the backend server and returns an upload ID.
+ * Orchestrates the direct-to-blob upload process and starts the conversion.
  */
-export async function uploadVideo(blob: Blob): Promise<UploadResponse> {
+export async function uploadVideo(blob: Blob, filename: string): Promise<UploadResponse> {
   if (!blob || blob.size === 0) {
     throw new Error("The video to convert is missing.");
   }
-
   if (!API_BASE_URL) {
-    console.warn(
-      "NEXT_PUBLIC_API_BASE_URL is not set. Using mock data for upload. Polling will fail.",
-    );
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return { uploadId: "mock-id-for-ui-testing" };
+    throw new Error("API_BASE_URL is not set. Cannot process upload.");
   }
 
-  const formData = new FormData();
-  formData.append("file", blob, "video.webm");
-
-  const response = await fetch(`${API_BASE_URL}/api/upload`, {
+  // 1. Get a pre-signed URL from our backend for direct blob upload.
+  const uploadUrlResponse = await fetch(`${API_BASE_URL}/api/upload-url`, {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename }),
   });
+  if (!uploadUrlResponse.ok) {
+    throw new Error("Failed to get a pre-signed URL for upload.");
+  }
+  const { uploadUrl, downloadUrl } = await uploadUrlResponse.json();
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to upload video: ${response.status} ${errorText}`);
+  // 2. Upload the file directly to Vercel Blob using the pre-signed URL.
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    body: blob,
+  });
+  if (!uploadResponse.ok) {
+    throw new Error("Failed to upload file to Blob storage.");
   }
 
-  return response.json();
+  // 3. Notify our backend that the upload is complete and start the conversion.
+  const startResponse = await fetch(`${API_BASE_URL}/api/start-conversion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ downloadUrl }),
+  });
+  if (!startResponse.ok) {
+    const errorText = await startResponse.text();
+    throw new Error(`Failed to start conversion: ${startResponse.status} ${errorText}`);
+  }
+
+  return startResponse.json();
 }
 
 /**
@@ -59,19 +77,15 @@ export async function fetchConvertedModel(uploadId: string): Promise<ConvertedMo
   for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
     const response = await fetch(`${API_BASE_URL}/api/result/${uploadId}`);
     if (!response.ok) {
-      // Stop polling if the server gives an error response
       throw new Error(`Failed to fetch conversion status: ${response.status}`);
     }
 
     const result: ConversionStatus = await response.json();
 
     if (result.status === "completed" && result.model_info) {
-      // The backend returns a relative URL, so we prepend the base URL
-      // to make it absolute for the 3D viewer component.
-      return {
-        ...result.model_info,
-        url: `${API_BASE_URL}${result.model_info.url}`,
-      };
+      // The backend now returns a full, absolute URL from Vercel Blob.
+      // No need to prepend the base URL.
+      return result.model_info;
     }
 
     if (result.status === "failed") {
