@@ -4,37 +4,22 @@ import { Suspense, useEffect } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Environment, Html, OrbitControls } from "@react-three/drei";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { Mesh, MeshStandardMaterial } from "three";
-
-export type ModelType = "obj" | "stl";
 
 type ConvertedModelViewerProps = {
   modelUrl: string;
-  modelType: ModelType;
   onLoaded?: () => void;
 };
 
-function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
-  // From the obj url, derive the mtl url.
-  const mtlUrl = url.replace(/\.obj$/, ".mtl");
-  
-  // Load the materials first
-  const materials = useLoader(MTLLoader, mtlUrl);
-  
-  // Load the object, and apply the materials
-  const object = useLoader(OBJLoader, url, (loader) => {
-    materials.preload();
-    loader.setMaterials(materials);
-  });
+function ObjectModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
+  const object = useLoader(OBJLoader, url);
 
   useEffect(() => {
     object.traverse((child) => {
       if (child instanceof Mesh) {
-        // Create a new material that uses vertex colors AND is double-sided
+        // Apply a standard material to the mesh
         child.material = new MeshStandardMaterial({
-          vertexColors: true,
+          color: "#eee", // A light grey color
           side: 2, // THREE.DoubleSide
           metalness: 0.1,
           roughness: 0.6,
@@ -43,26 +28,12 @@ function ObjModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
         child.castShadow = true;
       }
     });
-    
-    // Fire the onLoaded callback once the object is loaded.
+
+    // Fire the onLoaded callback once the object is loaded and processed.
     onLoaded?.();
   }, [object, onLoaded]);
 
   return <primitive object={object} />;
-}
-
-function StlModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
-  const geometry = useLoader(STLLoader, url);
-
-  useEffect(() => {
-    onLoaded?.();
-  }, [onLoaded, geometry]);
-
-  return (
-    <mesh geometry={geometry as unknown as Mesh["geometry"]}>
-      <meshStandardMaterial color="#8ec5ff" metalness={0.1} roughness={0.4} />
-    </mesh>
-  );
 }
 
 function CanvasFallback() {
@@ -76,20 +47,8 @@ function CanvasFallback() {
   );
 }
 
-function ModelHost({
-  modelUrl,
-  modelType,
-  onLoaded,
-}: ConvertedModelViewerProps) {
-  if (modelType === "stl") {
-    return <StlModel url={modelUrl} onLoaded={onLoaded} />;
-  }
-  return <ObjModel url={modelUrl} onLoaded={onLoaded} />;
-}
-
 export function ConvertedModelViewer({
   modelUrl,
-  modelType,
   onLoaded,
 }: ConvertedModelViewerProps) {
   return (
@@ -109,7 +68,7 @@ export function ConvertedModelViewer({
 
         <Suspense fallback={<CanvasFallback />}>
           <group scale={1.4}>
-            <ModelHost modelType={modelType} modelUrl={modelUrl} onLoaded={onLoaded} />
+            <ObjectModel url={modelUrl} onLoaded={onLoaded} />
           </group>
           <Environment preset="city" />
         </Suspense>

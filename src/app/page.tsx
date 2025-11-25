@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { uploadVideo, fetchConvertedModel } from "@/lib/api";
-import type { ModelType } from "@/components/ConvertedModelViewer";
 
 const ConvertedModelViewer = dynamic(
   () => import("@/components/ConvertedModelViewer").then((mod) => mod.ConvertedModelViewer),
@@ -16,7 +15,7 @@ type RecordingStatus = "idle" | "recording" | "processing";
 type ToastTone = "info" | "error";
 
 
-const ACCESS_PASSWORD = "2025jhyw";
+const ACCESS_PASSWORD = process.env.NEXT_PUBLIC_ACCESS_PASSWORD || "2025jhyw";
 const MAX_DURATION_MS = 60_000;
 
 function formatTime(ms: number) {
@@ -44,8 +43,7 @@ export default function HomePage() {
   const [processingResult, setProcessingResult] = useState(false);
 
   const [modelUrl, setModelUrl] = useState<string | null>(null);
-  const [modelType, setModelType] = useState<ModelType>("obj");
-  const [modelLabel, setModelLabel] = useState("Demo model");
+  const [modelLabel, setModelLabel] = useState("Generated Model");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
 
@@ -334,7 +332,6 @@ export default function HomePage() {
       const model = await fetchConvertedModel(uploadId);
       
       setModelUrl(model.url);
-      setModelType(model.type);
       setModelLabel(model.label);
 
     } catch (error) {
@@ -384,7 +381,7 @@ export default function HomePage() {
         {passwordError ? (
           <span className="text-sm text-rose-400">{passwordError}</span>
         ) : (
-          <span className="text-xs text-slate-500">힌트: 2025jhyw</span>
+          !process.env.NEXT_PUBLIC_ACCESS_PASSWORD && <span className="text-xs text-slate-500">힌트: 2025jhyw</span>
         )}
       </label>
       <button
@@ -517,9 +514,6 @@ export default function HomePage() {
             {processingResult ? "처리 중" : "확인"}
           </button>
         </div>
-        <p className="text-center text-xs text-slate-400 md:text-left md:text-sm">
-          실제 변환은 아직 연결되지 않았습니다. FastAPI 연동 시 자동 업로드됩니다.
-        </p>
       </div>
     </section>
   );
@@ -528,7 +522,7 @@ export default function HomePage() {
     <section className="flex flex-1 flex-col gap-6 md:grid md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start md:gap-10">
       <header className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Demo Result</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Result</p>
           <button
             type="button"
             onClick={() => setIsFullscreen(true)}
@@ -552,7 +546,7 @@ export default function HomePage() {
           ))}
         </div>
         <p className="text-sm text-slate-300 md:text-base">
-          터치로 회전, 핀치로 확대/축소할 수 있습니다. FastAPI 전환 시 API 베이스 URL만 교체하면 됩니다.
+          생성된 3D 모델입니다. 터치 및 마우스로 회전, 확대, 축소할 수 있습니다.
         </p>
         <div className="hidden rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300 md:block">
           <p className="font-semibold text-white">Tip</p>
@@ -570,7 +564,6 @@ export default function HomePage() {
               <ConvertedModelViewer
                 key={modelUrl}
                 modelUrl={modelUrl}
-                modelType={modelType}
                 onLoaded={() => {
                   setModelLoading(false);
                   showToast("3D 뷰어가 준비되었습니다.");
@@ -597,9 +590,6 @@ export default function HomePage() {
           >
             다시 촬영하기
           </button>
-          <p className="text-center text-xs text-slate-400">
-            API 연동 시 `uploadVideo()`와 `fetchConvertedModel()` 구현만 교체하면 됩니다.
-          </p>
         </div>
       </div>
       {isFullscreen && modelUrl && (
@@ -616,7 +606,7 @@ export default function HomePage() {
               </button>
             </div>
             <div className="mt-2 flex-1 overflow-hidden rounded-2xl bg-slate-950">
-              <ConvertedModelViewer modelUrl={modelUrl} modelType={modelType} />
+              <ConvertedModelViewer modelUrl={modelUrl} />
             </div>
           </div>
         </div>

@@ -4,16 +4,17 @@ export type UploadResponse = {
 
 export type ConvertedModel = {
   url: string;
-  type: "obj" | "stl";
   label: string;
 };
 
 export type ConversionStatus = {
-  status: "processing" | "completed";
+  status: "processing" | "completed" | "failed";
   model_info: ConvertedModel | null;
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const POLLING_INTERVAL_MS = 2500;
+const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 2.5 seconds = 2.5 minutes timeout
 
 /**
  * Uploads the video to the backend server and returns an upload ID.
@@ -25,7 +26,7 @@ export async function uploadVideo(blob: Blob): Promise<UploadResponse> {
 
   if (!API_BASE_URL) {
     console.warn(
-      "NEXT_PUBLIC_API_BASE_URL is not set. Using mock data. See instructions for running a local backend.",
+      "NEXT_PUBLIC_API_BASE_URL is not set. Using mock data for upload. Polling will fail.",
     );
     await new Promise((resolve) => setTimeout(resolve, 500));
     return { uploadId: "mock-id-for-ui-testing" };
@@ -52,19 +53,13 @@ export async function uploadVideo(blob: Blob): Promise<UploadResponse> {
  */
 export async function fetchConvertedModel(uploadId: string): Promise<ConvertedModel> {
   if (!API_BASE_URL) {
-    // Return mock data if the backend URL is not set
-    await new Promise((resolve) => setTimeout(resolve, 10000)); // 10-second delay
-    return {
-      url: `/output.obj`, // Points to /public/output.obj
-      type: "obj",
-      label: `Custom Mockup`,
-    };
+    throw new Error("Cannot fetch model result because API_BASE_URL is not set.");
   }
 
-  // Poll the result endpoint until the status is 'completed'
-  while (true) {
+  for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
     const response = await fetch(`${API_BASE_URL}/api/result/${uploadId}`);
     if (!response.ok) {
+      // Stop polling if the server gives an error response
       throw new Error(`Failed to fetch conversion status: ${response.status}`);
     }
 
@@ -79,7 +74,14 @@ export async function fetchConvertedModel(uploadId: string): Promise<ConvertedMo
       };
     }
 
-    // Wait for 2 seconds before polling again
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (result.status === "failed") {
+      throw new Error("Model conversion failed on the server.");
+    }
+
+    // Wait for the specified interval before the next attempt
+    await new Promise((resolve) => setTimeout(resolve, POLLING_INTERVAL_MS));
   }
+
+  // If the loop finishes without returning, it means we've timed out
+  throw new Error("Model conversion timed out.");
 }
