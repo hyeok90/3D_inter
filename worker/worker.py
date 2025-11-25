@@ -189,7 +189,7 @@ async def process_and_notify(upload_id: str, video_path: str, webhook_url: str):
     
     try:
         # 1. Extract frames from video
-        extract_frames_from_video(video_path, str(images_dir), fps=3.0)
+        extract_frames_from_video(video_path, str(images_dir), fps=1.0)
 
         # 2. Run model inference
         predictions = run_model_inference(str(images_dir), model)
