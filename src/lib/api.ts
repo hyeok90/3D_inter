@@ -20,6 +20,9 @@ if (process.env.VERCEL_URL) {
   API_BASE_URL = `https://` + process.env.VERCEL_URL;
 }
 
+const POLLING_INTERVAL_MS = 2500;
+const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 2.5 seconds = 2.5 minutes timeout
+
 /**
  * Uploads the video to the backend server and returns an upload ID.
  */
