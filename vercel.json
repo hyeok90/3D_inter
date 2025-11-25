@@ -12,6 +12,10 @@
   ],
   "routes": [
     {
+      "src": "/(.*)",
+      "handle": "filesystem"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "backend/main.py",
       "headers": {
@@ -19,10 +23,6 @@
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Accept"
       }
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/"
     }
   ]
 }

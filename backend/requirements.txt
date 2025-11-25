@@ -1,4 +1,9 @@
+# FastAPI and web server
 fastapi
 uvicorn[standard]
 python-multipart
 httpx
+
+# Redis for Vercel KV state management
+redis
+
