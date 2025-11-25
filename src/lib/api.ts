@@ -12,14 +12,7 @@ export type ConversionStatus = {
   model_info: ConvertedModel | null;
 };
 
-// Vercel-deployed frontend needs to know the URL of its own backend.
-// This logic automatically determines the API base URL for both production (Vercel) and local environments.
-let API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-if (process.env.VERCEL_URL) {
-  // In a Vercel environment, VERCEL_URL is the domain of the deployment.
-  API_BASE_URL = `https://` + process.env.VERCEL_URL;
-}
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const POLLING_INTERVAL_MS = 2500;
 const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 2.5 seconds = 2.5 minutes timeout
 
