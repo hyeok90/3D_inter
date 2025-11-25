@@ -1,11 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  env: {
-    // This makes the Vercel deployment URL available to the client-side code.
-    NEXT_PUBLIC_API_BASE_URL: process.env.VERCEL_URL
-      ? `https://` + process.env.VERCEL_URL
-      : "http://localhost:8000",
+  // In development, proxy API requests to the local backend server
+  // to avoid CORS issues and simplify the setup.
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://localhost:8000/api/:path*",
+      },
+    ];
   },
 };
 

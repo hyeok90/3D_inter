@@ -1,13 +1,13 @@
 import os
 import shutil
-import uuid
 import httpx
-from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List
 import gc
 import sys
+import glob
 
 # --- VGGT and ML Imports ---
 import cv2
@@ -38,10 +38,7 @@ def load_model():
         print(f"Model loaded successfully on {device}")
     except Exception as e:
         print(f"FATAL: Could not load VGGT model: {e}")
-        # In a real scenario, you might want to exit if the model fails to load.
-        # For now, we'll let it run and it will fail on request.
         model = None
-
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
@@ -59,18 +56,20 @@ async def lifespan(app_instance: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- Directories Setup ---
-# All processing happens in temporary directories, so these are not strictly needed
-# but can be useful for debugging if you disable cleanup.
-WORKER_UPLOAD_DIR = "worker_uploads"
-WORKER_RESULT_DIR = "worker_results"
-os.makedirs(WORKER_UPLOAD_DIR, exist_ok=True)
-os.makedirs(WORKER_RESULT_DIR, exist_ok=True)
+# These directories are now managed by the orchestrator, but the worker needs to know about them.
+RESULTS_DIR = "worker_results"
+WORKER_TEMP_DIR = "worker_temp" # For intermediate files like frames
+os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(WORKER_TEMP_DIR, exist_ok=True)
 
 
-# --- Actual 3D Model Conversion Logic (from reference.py) ---
+# --- Actual 3D Model Conversion Logic (largely unchanged) ---
 
-def extract_frames_from_video(video_path: str, output_dir: str, fps: float = 1.0) -> List[str]:
+def extract_frames_from_video(video_path: str, output_dir: str, fps: float = 3.0) -> list[str]:
     print(f"Extracting frames from video: {video_path}")
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video file not found at {video_path}")
+    
     vs = cv2.VideoCapture(video_path)
     video_fps = vs.get(cv2.CAP_PROP_FPS)
     if video_fps == 0:
@@ -86,7 +85,6 @@ def extract_frames_from_video(video_path: str, output_dir: str, fps: float = 1.0
         if not gotit:
             break
         
-        # Ensure we read frames at the correct interval
         if count % frame_interval == 0:
             image_path = os.path.join(output_dir, f"{frame_num:06d}.png")
             cv2.imwrite(image_path, frame)
@@ -174,82 +172,76 @@ def predictions_to_obj(predictions: dict, obj_path: str, conf_thres: float = 50.
     o3d.io.write_triangle_mesh(obj_path, mesh, write_vertex_colors=True)
     print(f"OBJ mesh created. Vertices: {len(mesh.vertices)}, Triangles: {len(mesh.triangles)}")
 
+async def notify_orchestrator(webhook_url: str, job_id: str, result_path: str):
+    """Notifies the main app that the conversion is complete."""
+    print(f"Sending result for {job_id} to webhook: {webhook_url}")
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            payload = {"job_id": job_id, "result_path": result_path}
+            response = await client.post(webhook_url, json=payload)
+            response.raise_for_status()
+            print(f"Successfully sent webhook for {job_id}")
+    except httpx.RequestError as e:
+        print(f"Failed to send webhook for {job_id}: {e}")
 
 # --- Background Task for Conversion and Webhook ---
-async def process_and_notify(upload_id: str, video_url: str, webhook_url: str):
+async def process_and_notify(job_id: str, video_path: str, webhook_url: str):
     """
-    Downloads the video from a URL, runs the full conversion pipeline, 
-    and sends the result back to the main app's webhook.
+    Runs the full conversion pipeline from a local file path and notifies the orchestrator.
     """
-    temp_dir = Path(WORKER_RESULT_DIR) / upload_id
-    images_dir = temp_dir / "images"
+    temp_processing_dir = Path(WORKER_TEMP_DIR) / job_id
+    images_dir = temp_processing_dir / "images"
     os.makedirs(images_dir, exist_ok=True)
     
-    temp_video_path = str(temp_dir / f"{upload_id}_source_video.mp4")
-    result_obj_filename = f"{upload_id}.obj"
-    result_obj_path = str(temp_dir / result_obj_filename)
+    result_obj_path = os.path.abspath(os.path.join(RESULTS_DIR, f"{job_id}.obj"))
     
     try:
-        # 1. Download the video from the provided URL
-        print(f"Downloading video from: {video_url}")
-        async with httpx.AsyncClient(timeout=None) as client:
-            with open(temp_video_path, "wb") as f:
-                async with client.stream("GET", video_url) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_bytes():
-                        f.write(chunk)
-        print(f"Video downloaded to: {temp_video_path}")
+        # 1. Extract frames from the local video file
+        extract_frames_from_video(video_path, str(images_dir), fps=3.0)
 
-        # 2. Extract frames from the downloaded video
-        extract_frames_from_video(temp_video_path, str(images_dir), fps=3.0)
-
-        # 3. Run model inference
+        # 2. Run model inference
         predictions = run_model_inference(str(images_dir), model)
         
-        # 4. Create OBJ file
+        # 3. Create OBJ file in the shared results directory
         predictions_to_obj(predictions, result_obj_path, conf_thres=50.0, poisson_depth=8)
         
-        # Clean up model-related resources
+        # 4. Clean up model-related resources
         del predictions
         gc.collect()
         torch.cuda.empty_cache()
 
-        # 5. Send the result back to the main app's webhook
-        print(f"Sending result for {upload_id} to webhook: {webhook_url}")
-        async with httpx.AsyncClient(timeout=None) as client:
-            with open(result_obj_path, "rb") as f:
-                files = {"objFile": (result_obj_filename, f, "application/octet-stream")}
-                data = {"uploadId": upload_id}
-                response = await client.post(webhook_url, data=data, files=files)
-                response.raise_for_status()
-                print(f"Successfully sent webhook for {upload_id}")
+        # 5. Notify the orchestrator that the job is complete
+        await notify_orchestrator(webhook_url, job_id, result_obj_path)
 
     except Exception as e:
-        print(f"FATAL: Conversion pipeline failed for {upload_id}: {e}")
+        print(f"FATAL: Conversion pipeline failed for {job_id}: {e}")
+        # Optionally, notify orchestrator of failure
     finally:
-        # 6. Clean up all temporary files and directories for this job
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir)
-        print(f"Cleaned up all temporary files for job {upload_id}")
-
+        # 6. Clean up INTERMEDIATE files for this job (frames)
+        if temp_processing_dir.exists():
+            shutil.rmtree(temp_processing_dir)
+            print(f"Cleaned up intermediate files for job {job_id}")
+        
+        # 7. Clean up the original SOURCE video file
+        if os.path.exists(video_path):
+            os.remove(video_path)
+            print(f"Cleaned up source video for job {job_id}: {video_path}")
 
 # --- Worker API Endpoint ---
+class ConversionRequest(BaseModel):
+    job_id: str
+    video_path: str
+    webhook_url: str
+
 @app.post("/convert")
-async def convert_video(
-    background_tasks: BackgroundTasks,
-    uploadId: str = Form(...),
-    webhookUrl: str = Form(...),
-    videoUrl: str = Form(...),
-):
+async def convert_video(request: ConversionRequest, background_tasks: BackgroundTasks):
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded. Worker is not ready.")
 
-    print(f"Worker received job: {uploadId}. Starting conversion in background.")
+    print(f"Worker received job: {request.job_id}. Starting conversion in background.")
     
-    # Add the long-running task to the background
-    background_tasks.add_task(process_and_notify, uploadId, videoUrl, webhookUrl)
+    background_tasks.add_task(process_and_notify, request.job_id, request.video_path, request.webhook_url)
     
-    # Immediately return a response to the main app
     return {"message": "Conversion task accepted and is running in the background."}
 
 # --- Health Check Endpoint ---

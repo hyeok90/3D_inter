@@ -4,9 +4,3 @@ uvicorn[standard]
 python-multipart
 httpx
 
-# Redis for Vercel KV state management
-redis
-
-# Vercel Blob for direct file uploads
-vercel-blob
-
