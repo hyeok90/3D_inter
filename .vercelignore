@@ -1,0 +1,12 @@
+# Ignore the GPU worker code and its large library, it's deployed separately.
+worker/
+vggt/
+
+# Ignore local development files and caches
+.env.local
+.DS_Store
+*.pyc
+__pycache__/
+
+# Ignore node_modules, handled by `npm install`
+node_modules
