@@ -9,14 +9,17 @@ from typing import List
 import gc
 import sys
 
-# Add project root to path to allow finding the 'vggt' package
-sys.path.append(".")
+# Add the 'vggt' sub-directory to the path to allow finding its modules
+sys.path.append("vggt")
 
 # --- VGGT and ML Imports ---
 import cv2
 import torch
 import numpy as np
 import open3d as o3d
+
+# These imports must come after the sys.path modification
+from visual_util import predictions_to_glb
 from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri

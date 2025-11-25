@@ -5,9 +5,10 @@ python-multipart
 httpx
 
 # VGGT Model Dependencies from vggt/requirements.txt
-torch==2.3.1
-torchvision==0.18.1
-numpy==1.26.1
+# Removed version pinning to allow pip to find a compatible version
+torch
+torchvision
+numpy
 Pillow
 huggingface_hub
 einops
