@@ -1,25 +1,40 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Environment, Html, OrbitControls } from "@react-three/drei";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { Mesh, MeshStandardMaterial } from "three";
+import { Box3, Mesh, MeshStandardMaterial, Vector3 } from "three";
 
 type ConvertedModelViewerProps = {
   modelUrl: string;
   onLoaded?: () => void;
 };
 
-function ObjectModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) {
+function ObjectModel({
+  url,
+  onLoaded,
+  setOrbitTarget,
+}: {
+  url: string;
+  onLoaded?: () => void;
+  setOrbitTarget: (target: [number, number, number]) => void;
+}) {
   const object = useLoader(OBJLoader, url);
 
   useEffect(() => {
+    // This effect runs once after the model has loaded
+    const box = new Box3().setFromObject(object);
+    const center = box.getCenter(new Vector3());
+
+    // Set the orbit controls target to the center of the model
+    setOrbitTarget([center.x, center.y, center.z]);
+
     object.traverse((child) => {
       if (child instanceof Mesh) {
         // Apply a standard material to the mesh
         child.material = new MeshStandardMaterial({
-          color: "#eee", // A light grey color
+          vertexColors: true, // Use vertex colors from the model
           side: 2, // THREE.DoubleSide
           metalness: 0.1,
           roughness: 0.6,
@@ -31,7 +46,7 @@ function ObjectModel({ url, onLoaded }: { url: string; onLoaded?: () => void }) 
 
     // Fire the onLoaded callback once the object is loaded and processed.
     onLoaded?.();
-  }, [object, onLoaded]);
+  }, [object, onLoaded, setOrbitTarget]);
 
   return <primitive object={object} />;
 }
@@ -51,6 +66,8 @@ export function ConvertedModelViewer({
   modelUrl,
   onLoaded,
 }: ConvertedModelViewerProps) {
+  const [orbitTarget, setOrbitTarget] = useState<[number, number, number]>([0, 0, 0]);
+
   return (
     <div className="relative h-full w-full">
       <Canvas shadows camera={{ position: [0, 2, 5], fov: 50 }} dpr={[1, 2]}>
@@ -68,7 +85,7 @@ export function ConvertedModelViewer({
 
         <Suspense fallback={<CanvasFallback />}>
           <group scale={1.4}>
-            <ObjectModel url={modelUrl} onLoaded={onLoaded} />
+            <ObjectModel url={modelUrl} onLoaded={onLoaded} setOrbitTarget={setOrbitTarget} />
           </group>
           <Environment preset="city" />
         </Suspense>
@@ -79,7 +96,12 @@ export function ConvertedModelViewer({
           <shadowMaterial opacity={0.3} />
         </mesh>
         
-        <OrbitControls enablePan enableZoom enableRotate />
+        <OrbitControls
+          enablePan
+          enableZoom
+          enableRotate
+          target={orbitTarget} // Set the rotation center dynamically
+        />
       </Canvas>
     </div>
   );

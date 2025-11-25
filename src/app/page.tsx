@@ -383,10 +383,8 @@ export default function HomePage() {
           autoFocus
           autoComplete="off"
         />
-        {passwordError ? (
+        {passwordError && (
           <span className="text-sm text-rose-400">{passwordError}</span>
-        ) : (
-          !process.env.NEXT_PUBLIC_ACCESS_PASSWORD && <span className="text-xs text-slate-500">힌트: 2025jhyw</span>
         )}
       </label>
       <button
