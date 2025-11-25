@@ -18,3 +18,4 @@ safetensors
 opencv-python
 open3d
 trimesh
+gradio
