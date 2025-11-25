@@ -1,0 +1,38 @@
+# Node.js
+node_modules
+.next
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.egg-info/
+.ipynb_checkpoints
+
+# Anaconda
+.conda/
+.ipynb_checkpoints
+/conda-meta/
+/conda-bld/
+
+# Temporary files from our app
+uploads/
+results/
+worker_uploads/
+worker_results/
+
+# Secrets and local environment configuration
+.env.local
+
+# OS-specific
+.DS_Store
+Thumbs.db
