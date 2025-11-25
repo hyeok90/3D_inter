@@ -12,9 +12,9 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/main.py",
-      "headers": {
+          "src": "/api/(.*)",
+          "methods": ["GET", "POST", "OPTIONS"],
+          "dest": "backend/main.py",      "headers": {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Accept"
