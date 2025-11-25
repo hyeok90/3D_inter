@@ -1,7 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Request, Form
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import shutil
 import os
@@ -9,15 +8,6 @@ import uuid
 import httpx
 
 app = FastAPI()
-
-# Enable CORS for cross-origin requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
 # --- Configuration ---
 # This is the address of your external GPU worker.
