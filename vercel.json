@@ -7,7 +7,7 @@
       "config": { "maxLambdaSize": "15mb" }
     },
     {
-      "src": "next.config.ts",
+      "src": "package.json",
       "use": "@vercel/next"
     }
   ],
